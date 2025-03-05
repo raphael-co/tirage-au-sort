@@ -1,101 +1,334 @@
-import Image from "next/image";
+"use client";
+import { useState, useEffect } from "react";
+import Biere from "@/component/biere";
+import { signIn, signOut, useSession } from "next-auth/react";
 
-export default function Home() {
+
+const Home = () => {
+  const { data: session, status } = useSession(); // ✅ Vérifie la session
+  const [participants, setParticipants] = useState<{ name: string; email: string; score: number }[]>([]);
+  const [questions, setQuestions] = useState<{ id: string; question: string; options: string[] }[]>([]);
+  const [winner, setWinner] = useState<{ name: string; email: string; score: number } | null>(null);
+  const [TOTAL_TIME, setTOTAL_TIME] = useState(20)
+  const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
+  const [quizAnswers, setQuizAnswers] = useState<{ [key: string]: string }>({});
+  const [loading, setLoading] = useState(true);
+  const [hasCompletedQuiz, setHasCompletedQuiz] = useState(false); // ✅ Nouvel état
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  // 🔹 Ajout de l'état pour contrôler le démarrage du décompte
+  const [isCountdownRunning, setIsCountdownRunning] = useState(false);
+
+  // 🔹 Vérifier si l'utilisateur est un admin
+  const isAdmin = session?.user?.role === "admin";
+
+  // 🔹 Fonction pour démarrer le décompte
+  const startCountdown = () => {
+    if (!isAdmin) return; // Seuls les admins peuvent démarrer
+    setTOTAL_TIME(20)
+    setIsCountdownRunning(true);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    const res = await signIn("credentials", {
+      name,
+      password,
+      redirect: false, // Désactive la redirection automatique pour la gérer nous-mêmes
+    });
+
+    if (res?.error) {
+      setError(res.error);
+    }
+  };
+
+
+  // Récupérer le gagnant depuis l'API
+  const fetchWinner = async () => {
+    try {
+      const res = await fetch("/api/results");
+      if (!res.ok) throw new Error("Erreur de chargement du gagnant");
+      const data = await res.json();
+      console.log(data);
+      console.log(data.length);
+
+      if (data.length > 0) {
+        setWinner(data[0].winner);
+        setTimeLeft(0)
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+
+  useEffect(() => {
+
+    fetchParticipants();
+    fetchWinner();
+    if (session) {
+      fetchQuestions();
+    }
+  }, [session]);
+
+  // Récupérer les participants
+  const fetchParticipants = async () => {
+    try {
+      const res = await fetch("/api/users/participents");
+      if (!res.ok) throw new Error("Erreur de chargement des participants");
+      const data = await res.json();
+      setParticipants(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Récupérer les questions
+  const fetchQuestions = async () => {
+    try {
+      const res = await fetch("/api/questions/check");
+
+      if (res.status === 204) {
+        setHasCompletedQuiz(true); // ✅ L'utilisateur a déjà répondu
+        setQuestions([]);
+        return;
+      }
+
+      if (res.status === 201) {
+        setHasCompletedQuiz(false); // ✅ L'utilisateur a déjà répondu
+        setQuestions([]);
+        return;
+      }
+
+      if (!res.ok) throw new Error("Erreur de chargement des questions");
+
+      const data = await res.json();
+      setQuestions(data.questions);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Décompte du timer
+  useEffect(() => {
+    if (timeLeft > 0 && isCountdownRunning) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => Math.max(prev - 1, 0));
+      }, 1000);
+      return () => clearInterval(timer);
+    } else if (timeLeft === 0 && isCountdownRunning) {
+      handleDraw();
+      setIsCountdownRunning(false);
+    }
+  }, [timeLeft, isCountdownRunning]);
+  // Tirage au sort pondéré par le score
+  const handleDraw = async () => {
+    if (participants.length === 0) return;
+    const weightedPool = participants.flatMap((p) => Array(p.score + 1).fill(p));
+    const randomIndex = Math.floor(Math.random() * weightedPool.length);
+    const selectedWinner = weightedPool[randomIndex];
+
+    try {
+      const res = await fetch("/api/results", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ winnerId: selectedWinner.id })
+      });
+      if (!res.ok) throw new Error("Erreur lors de l'enregistrement du gagnant");
+      const data = await res.json();
+      setWinner(selectedWinner);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Envoi des réponses utilisateur
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await Promise.all(
+        Object.entries(quizAnswers).map(async ([questionId, selectedAnswer]) => {
+          const res = await fetch("/api/answers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questionId, selectedAnswer }),
+          });
+          if (!res.ok) throw new Error("Erreur lors de l'envoi d'une réponse");
+        })
+      );
+
+      await fetchParticipants();
+      fetchQuestions();
+      setQuizAnswers({});
+    } catch (error) {
+      console.error("Erreur lors de l'envoi des réponses :", error);
+    }
+  };
+
+  // Formatage du temps
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes < 10 ? `0${minutes}` : minutes}:${secs < 10 ? `0${secs}` : secs}`;
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="min-h-screen bg-cover bg-center flex flex-col items-center p-8 bg-[#fffff]">
+      <div className="inset-0 bg-black opacity-60"></div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {/* ✅ Bouton Déconnexion en haut à gauche */}
+      <div className="absolute top-4 right-4">
+        {session && (
+          <button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="px-4 py-2 bg-red-500 text-white font-bold rounded-md transition-transform hover:scale-105"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Déconnexion
+          </button>
+        )}
+      </div>
+
+      <div className="z-10 w-full max-w-5xl grid md:grid-cols-3 gap-8 p-6 rounded-lg shadow-xl">
+        {/* Affichage du formulaire de connexion si l'utilisateur n'est pas connecté */}
+        {status === "loading" ? (
+          <p>Chargement...</p>
+        ) : !session ? (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <h2 className="text-3xl font-semibold text-amber-700 mb-4">Connexion</h2>
+            <div className="p-4 bg-amber-100 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">connecte toi maintenant !!!</h3>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <input type="hidden" name="password" value={password} />
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium">Name</label>
+                <input
+                  id="name"
+                  type="text"
+                  name="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium">Mot de passe</label>
+                <input
+                  id="password"
+                  type="password"
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full px-6 py-3 bg-amber-500 text-white font-bold rounded-md transition-transform hover:scale-105"
+            >
+              je me connecte il y a quoi
+            </button>
+
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <h2 className="text-3xl font-semibold text-amber-700 mb-4">Questions</h2>
+            <div className="p-4 bg-amber-100 rounded-lg">
+              <h3 className="text-lg font-semibold mb-2">Répondez au QCM :</h3>
+              {loading ? (
+                <p>Chargement des questions...</p>
+              ) : hasCompletedQuiz ? (
+                <p className="text-green-600 font-bold">✅ Vous avez déjà complété le questionnaire !</p>
+              ) : (
+                questions.length > 0 ?
+                  questions.map((q) => (
+                    <div key={q.id} className="mb-3">
+                      <p className="font-medium">{q.question}</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {q.options.map((option) => (
+                          <label key={option} className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`q${q.id}`}
+                              value={option}
+                              checked={quizAnswers[q.id] === option}
+                              onChange={() => setQuizAnswers({ ...quizAnswers, [q.id]: option })}
+                              className="accent-amber-500"
+                            />
+                            <span>{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                  :
+                  "aucunes questions"
+              )}
+            </div>
+
+            {!hasCompletedQuiz && questions.length > 0 && (
+              <button
+                type="submit"
+                className="w-full px-6 py-3 bg-amber-500 text-white font-bold rounded-md transition-transform hover:scale-105"
+              >
+                Envoyer mes réponses
+              </button>
+            )}
+          </form>
+        )}
+
+        {/* Bière + Gagnant */}
+        <div className="flex flex-col items-center justify-center relative">
+          <Biere fillFraction={1 - timeLeft / TOTAL_TIME} />
+          {winner && timeLeft === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-4xl font-bold text-amber-900 animate-bounce bg-white bg-opacity-80 p-4 rounded-lg shadow-lg">
+                🎉 {winner.name} 🎉
+              </p>
+            </div>
+          )}
+          {isAdmin && !isCountdownRunning && !winner && (
+            <button
+              onClick={startCountdown}
+              className="mt-4 px-4 py-2 bg-amber-100 text-gray-600 font-bold rounded-md transition-transform hover:scale-105 cursor-pointer"
+            >
+              Lancer le décompte
+            </button>
+          )}
+          <p className="mt-4 text-yellow-300 text-xl">
+            {timeLeft > 0 ? `Remplissage dans ${formatTime(timeLeft)}` : `Cul sec pour toi ${winner?.name} !`}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Liste des participants */}
+        <section>
+          <h2 className="text-3xl font-semibold text-amber-700 mb-4">Participants</h2>
+          <ul className="space-y-2">
+            {participants.length === 0 ? (
+              <p>Aucun participant pour le moment...</p>
+            ) : (
+              participants.map((p, index) => (
+                <li key={index} className="p-3 bg-amber-100 rounded-md shadow-sm">
+                  <p className="font-bold">{p.name} (Score: {p.score})</p>
+                  <p className="text-sm text-gray-600">{p.email}</p>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+      </div>
     </div>
   );
-}
+};
+
+export default Home;

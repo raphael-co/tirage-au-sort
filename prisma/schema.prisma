@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  password  String
+  role      String   @default("user") // "admin" ou "user"
+  createdAt DateTime @default(now())
+
+  answers   Answer[]
+  results   Result[] @relation("UserResults") // ✅ Relation inverse avec Result
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  question  String
+  options   String[]
+  answer    String
+  createdAt DateTime @default(now())
+
+  answers   Answer[]
+}
+
+model Answer {
+  id         String   @id @default(uuid())
+  userId     String
+  questionId String
+  selected   String
+  correct    Boolean
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Result {
+  id         String   @id @default(uuid())
+  drawTime   DateTime @default(now()) // ✅ Heure du tirage
+  winnerId   String?  // ✅ ID du gagnant (peut être null si pas encore tiré)
+  isDrawn    Boolean  @default(false) // ✅ Tirage effectué ou non
+
+  winner     User? @relation("UserResults", fields: [winnerId], references: [id]) // ✅ Relation uniquement avec User
+}
