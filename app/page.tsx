@@ -9,7 +9,7 @@ const Home = () => {
   const [participants, setParticipants] = useState<{ name: string; email: string; score: number }[]>([]);
   const [questions, setQuestions] = useState<{ id: string; question: string; options: string[] }[]>([]);
   const [winner, setWinner] = useState<{ name: string; email: string; score: number } | null>(null);
-  const [TOTAL_TIME, setTOTAL_TIME] = useState(20)
+  const [TOTAL_TIME,] = useState(10)
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [quizAnswers, setQuizAnswers] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
@@ -25,8 +25,7 @@ const Home = () => {
 
   // 🔹 Fonction pour démarrer le décompte
   const startCountdown = () => {
-    if (!isAdmin) return; // Seuls les admins peuvent démarrer
-    setTOTAL_TIME(20)
+    setTimeLeft(TOTAL_TIME)
     setIsCountdownRunning(true);
   };
 
@@ -52,8 +51,6 @@ const Home = () => {
       const res = await fetch("/api/results");
       if (!res.ok) throw new Error("Erreur de chargement du gagnant");
       const data = await res.json();
-      console.log(data);
-      console.log(data.length);
 
       if (data.length > 0) {
         setWinner(data[0].winner);
@@ -121,12 +118,25 @@ const Home = () => {
         setTimeLeft((prev) => Math.max(prev - 1, 0));
       }, 1000);
       return () => clearInterval(timer);
-    } else if (timeLeft === 0 && isCountdownRunning) {
+    } else if (timeLeft === 0 && isCountdownRunning && isAdmin) {
       handleDraw();
       setIsCountdownRunning(false);
+    } else {
+      handleDrawNoAdmin()
     }
   }, [timeLeft, isCountdownRunning]);
   // Tirage au sort pondéré par le score
+
+  const handleDrawNoAdmin = async () => {
+    if (participants.length === 0) return;
+    const weightedPool = participants.flatMap((p) => Array(p.score + 1).fill(p));
+    const randomIndex = Math.floor(Math.random() * weightedPool.length);
+    const selectedWinner = weightedPool[randomIndex];
+
+
+    setWinner(selectedWinner);
+    setIsCountdownRunning(false)
+  }
   const handleDraw = async () => {
     if (participants.length === 0) return;
     const weightedPool = participants.flatMap((p) => Array(p.score + 1).fill(p));
@@ -193,7 +203,7 @@ const Home = () => {
         )}
       </div>
 
-      <div className="z-10 w-full max-w-5xl grid md:grid-cols-3 gap-8 p-6 rounded-lg shadow-xl">
+      <div className="z-10 w-full max-w-5xl grid md:grid-cols-3 gap-8 p-6 rounded-lg shadow-xl items-start">
         {/* Affichage du formulaire de connexion si l'utilisateur n'est pas connecté */}
         {status === "loading" ? (
           <p>Chargement...</p>
@@ -289,24 +299,46 @@ const Home = () => {
 
         {/* Bière + Gagnant */}
         <div className="flex flex-col items-center justify-center relative">
+          <h2 className="text-3xl font-semibold text-amber-700 mb-4" style={{
+            visibility: 'hidden'
+          }}>.</h2>
           <Biere fillFraction={1 - timeLeft / TOTAL_TIME} />
-          {winner && timeLeft === 0 && (
+          {winner && timeLeft === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="text-4xl font-bold text-amber-900 animate-bounce bg-white bg-opacity-80 p-4 rounded-lg shadow-lg">
-                🎉 {winner.name} 🎉
+                🍺 {winner.name} 🍺
               </p>
             </div>
-          )}
-          {isAdmin && !isCountdownRunning && !winner && (
+          ) :
+            isCountdownRunning &&
+            (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-4xl font-bold text-amber-900 bg-white bg-opacity-80 p-4 rounded-lg shadow-lg">
+                  {timeLeft}
+                </p>
+              </div>
+            )}
+          {isAdmin && !isCountdownRunning && !winner ? (
             <button
               onClick={startCountdown}
-              className="mt-4 px-4 py-2 bg-amber-100 text-gray-600 font-bold rounded-md transition-transform hover:scale-105 cursor-pointer"
+              disabled={isCountdownRunning}
+              className="mt-4 px-4 py-2 bg-amber-100 text-gray-600 font-bold rounded-md transition-transform hover:scale-105 cursor-pointer z-10"
             >
               Lancer le décompte
             </button>
-          )}
+          ) : (
+            <button
+              onClick={startCountdown}
+              disabled={isCountdownRunning}
+              className="mt-4 px-4 py-2 bg-amber-100 text-gray-600 font-bold rounded-md transition-transform hover:scale-105 cursor-pointer z-10"
+            >
+              servir un verre a...
+            </button>
+          )
+
+          }
           <p className="mt-4 text-yellow-300 text-xl">
-            {timeLeft > 0 ? `Remplissage dans ${formatTime(timeLeft)}` : `Cul sec pour toi ${winner?.name} !`}
+            {timeLeft === 0 && `Cul sec pour toi ${winner?.name} !`}
           </p>
         </div>
 

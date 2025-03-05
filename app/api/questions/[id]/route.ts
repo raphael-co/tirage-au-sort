@@ -39,15 +39,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        console.log('ici');
         
         const session = await getServerSession(authOptions);
         if (!session || (session.user?.role !== "admin")) {
             return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 });
         }
         const { id } = await params
-
-        console.log(id);
         
         await prisma.question.delete({ where: { id: id } });
 
