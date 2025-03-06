@@ -56,12 +56,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 }
 
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest, { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       select: {
         id: true,
         name: true,
