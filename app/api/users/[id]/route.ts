@@ -54,3 +54,36 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ status: "error", message: "Erreur lors de la suppression" }, { status: 500 });
   }
 }
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: params.id },
+      select: {
+        id: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        answers: {
+          include: {
+            question: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 });
+    }
+
+    return NextResponse.json(user, { status: 200 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Erreur lors de la récupération des scores" },
+      { status: 500 }
+    );
+  }
+}
