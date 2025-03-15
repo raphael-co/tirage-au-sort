@@ -17,6 +17,7 @@ const Home = () => {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // 🔹 Ajout de l'état pour contrôler le démarrage du décompte
   const [isCountdownRunning, setIsCountdownRunning] = useState(false);
 
@@ -160,6 +161,8 @@ const Home = () => {
   // Envoi des réponses utilisateur
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return; // Empêche la soumission multiple
+    setIsSubmitting(true);
     try {
       await Promise.all(
         Object.entries(quizAnswers).map(async ([questionId, selectedAnswer]) => {
@@ -177,6 +180,8 @@ const Home = () => {
       setQuizAnswers({});
     } catch (error) {
       console.error("Erreur lors de l'envoi des réponses :", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -289,6 +294,7 @@ const Home = () => {
             {!hasCompletedQuiz && questions.length > 0 && (
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="w-full px-6 py-3 bg-amber-500 text-white font-bold rounded-md transition-transform hover:scale-105"
               >
                 Envoyer mes réponses
