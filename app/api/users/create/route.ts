@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/utils/prisma";
 import bcrypt from "bcryptjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/utils/authOptions";
-
-const prisma = new PrismaClient();
 
 // 🔹 Créer un nouvel utilisateur (Admin requis)
 export async function POST(req: Request) {

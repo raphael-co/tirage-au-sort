@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/utils/authOptions";
 import bcrypt from "bcryptjs";
+import { prisma } from "@/utils/prisma";
 
-const prisma = new PrismaClient();
 
 // 🔹 Modifier un utilisateur (Admin requis)
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/utils/prisma";
 
 export async function adminMiddleware(req: NextRequest) {
   const name = req.headers.get("name");
